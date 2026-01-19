@@ -1,0 +1,18 @@
+#include "main.h"
+
+int main(void)
+{
+  HAL_Init();
+  SystemClock_Config();
+  MX_GPIO_Init();
+
+
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);
+
+ while (1)
+{
+  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
+  HAL_Delay(500);
+}
+
+}
