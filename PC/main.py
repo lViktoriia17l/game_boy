@@ -1,150 +1,239 @@
 import tkinter as tk
-from tkinter import messagebox
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import serial
 import serial.tools.list_ports
+import threading
 
-class GameInterface:
+# ================= PROTOCOL =================
+CMD_START    = 0x01
+CMD_RESTART  = 0x02
+CMD_GIVEUP   = 0x03
+CMD_SET      = 0x04
+CMD_CLEAR    = 0x05
+CMD_CLEARALL = 0x06
+CMD_FIELD    = 0x07
+
+STATUS_MAP = {
+    0x10: "OK",
+    0x11: "INVALID",
+    0x12: "LOCKED",
+    0x14: "YOU LOSE",
+    0x15: "YOU WIN"
+}
+
+# ================= GUI =================
+class SudokuGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("STM32 Sudoku Controller")
-        self.root.geometry("700x550")
+        self.root.title("STM32 Sudoku")
+        self.root.geometry("920x620")
 
         self.ser = None
+        self.selected_cell = (0, 0)
+        self.cells = [[None]*9 for _ in range(9)]
 
-        self.status_label = tk.Label(root, text="Waiting for connection...", bd=1, relief=tk.SUNKEN, anchor="w")
-        self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
+        self.status = tk.Label(root, text="Не підключено",
+                               relief=tk.SUNKEN, anchor="w")
+        self.status.pack(side=tk.BOTTOM, fill=tk.X)
 
-        self.create_menu_screen()
+        self.create_menu()
 
-    def create_menu_screen(self):
-        """Створює екран меню"""
-        self.menu_frame = tk.Frame(self.root)
-        self.menu_frame.pack(fill="both", expand=True)
+    # ========== SERIAL ==========
+    def checksum(self, *data):
+        return sum(data) & 0xFF
 
-        lbl_title = tk.Label(self.menu_frame, text="СУДОКУ", font=("Arial", 40, "bold"))
-        lbl_title.pack(pady=(30, 10))
+    def send_cmd(self, cmd, b1=0, b2=0, b3=0):
+        if not self.ser or not self.ser.is_open:
+            return
+        pkt = bytes([cmd, b1, b2, b3, self.checksum(cmd, b1, b2, b3)])
+        self.ser.write(pkt)
 
-        # --- БЛОК ПІДКЛЮЧЕННЯ ---
-        conn_frame = tk.LabelFrame(self.menu_frame, text="Налаштування з'єднання", padx=10, pady=10)
-        conn_frame.pack(pady=10)
+    def rx_thread(self):
+        while self.ser and self.ser.is_open:
+            try:
+                cmd = self.ser.read(1)
+                if not cmd:
+                    continue
 
-        tk.Label(conn_frame, text="Порт:").pack(side=tk.LEFT, padx=5)
-        
-        self.port_combo = ttk.Combobox(conn_frame, width=10)
+                cmd = cmd[0]
+
+                if cmd == CMD_FIELD:
+                    field = self.ser.read(81)
+                    status = self.ser.read(1)[0]
+                    chk = self.ser.read(1)[0]
+
+                    if chk != self.checksum(cmd, *field, status):
+                        continue
+
+                    self.root.after(0, self.update_field, field, status)
+
+            except serial.SerialException:
+                break
+
+    # ========== MENU ==========
+    def create_menu(self):
+        self.menu = tk.Frame(self.root)
+        self.menu.pack(expand=True)
+
+        tk.Label(self.menu, text="SUDOKU",
+                 font=("Segoe UI", 36, "bold")).pack(pady=20)
+
+        port_bar = tk.Frame(self.menu)
+        port_bar.pack(pady=10)
+
+        tk.Label(port_bar, text="COM порт:").pack(side=tk.LEFT)
+
+        self.port_combo = ttk.Combobox(port_bar, width=15, state="readonly")
         self.port_combo.pack(side=tk.LEFT, padx=5)
-        
-        btn_refresh = tk.Button(conn_frame, text="⟳", width=3, command=self.update_ports)
-        btn_refresh.pack(side=tk.LEFT, padx=2)
 
-        self.btn_connect = tk.Button(conn_frame, text="Connect", bg="#2196F3", fg="white", 
-                                     command=self.connect_serial)
-        self.btn_connect.pack(side=tk.LEFT, padx=10)
+        tk.Button(port_bar, text="Оновити",
+                  command=self.update_ports).pack(side=tk.LEFT)
 
-        self.btn_start = tk.Button(self.menu_frame, text="Start Game", font=("Arial", 16), 
-                             bg="#4CAF50", fg="white", width=15,
-                             state=tk.DISABLED, 
-                             command=self.start_game_transition)
+        self.btn_connect = tk.Button(self.menu, text="CONNECT",
+                                     width=20, command=self.connect)
+        self.btn_connect.pack(pady=10)
+
+        self.btn_start = tk.Button(self.menu, text="START GAME",
+                                   font=("Arial", 14, "bold"),
+                                   bg="#4CAF50", fg="white",
+                                   state=tk.DISABLED,
+                                   command=self.start_game)
         self.btn_start.pack(pady=20)
 
-        self.log_text = tk.Text(self.menu_frame, height=8, width=50)
-        self.log_text.pack(pady=10)
-        
+        self.log = tk.Text(self.menu, height=8, width=60)
+        self.log.pack()
+
         self.update_ports()
-        self.log_text.insert(tk.END, "System ready. Please connect to device.\n")
 
     def update_ports(self):
-        ports = serial.tools.list_ports.comports()
-        port_list = [port.device for port in ports]
-        self.port_combo['values'] = port_list
-        if port_list:
+        ports = []
+        for p in serial.tools.list_ports.comports():
+            desc = (p.description or "").lower()
+            if "bluetooth" in desc:
+                continue
+            if "usb" in desc or "stm" in desc or "serial" in desc:
+                ports.append(p.device)
+
+        self.port_combo["values"] = ports
+        if ports:
             self.port_combo.current(0)
-            self.log_text.insert(tk.END, f"Found ports: {port_list}\n")
-        else:
-            self.log_text.insert(tk.END, "No COM ports found.\n")
-        self.log_text.see(tk.END)
 
-    def connect_serial(self):
-        selected_port = self.port_combo.get()
-        if not selected_port:
-            messagebox.showwarning("Warning", "Please select a COM port!")
-            return
+    def connect(self):
+        port = self.port_combo.get()
         try:
-            self.ser = serial.Serial(selected_port, 115200, timeout=1)
-            if self.ser.is_open:
-                self.status_label.config(text=f"Connected to {selected_port}", bg="#d4edda")
-                self.log_text.insert(tk.END, f"Successfully connected to {selected_port}\n")
-                self.btn_connect.config(text="Connected", state=tk.DISABLED, bg="grey")
-                self.btn_start.config(state=tk.NORMAL)
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+
+            self.ser = serial.Serial(port, 115200, timeout=0.1)
+            self.log_msg(f"Connected to {port}")
+            self.status.config(text=f"Підключено: {port}")
+            self.btn_connect.config(text="Connected", state=tk.DISABLED)
+            self.btn_start.config(state=tk.NORMAL)
+
+            threading.Thread(target=self.rx_thread,
+                             daemon=True).start()
+
+        except PermissionError:
+            messagebox.showerror(
+                "Access denied",
+                f"Порт {port} зайнятий.\nЗакрий STM32CubeProgrammer / Serial Monitor."
+            )
         except Exception as e:
-            messagebox.showerror("Connection Error", f"Could not open port: {e}")
+            messagebox.showerror("Error", str(e))
 
-    def start_game_transition(self):
-        self.menu_frame.destroy()
-        self.status_label.config(text="Game Started")
-        self.create_game_screen()
+    def log_msg(self, msg):
+        self.log.insert(tk.END, msg + "\n")
+        self.log.see(tk.END)
 
-    def create_game_screen(self):
-        """Екран гри: клавіатура зліва, сітка справа"""
-        self.game_frame = tk.Frame(self.root)
-        self.game_frame.pack(fill="both", expand=True, padx=10, pady=10)
+    # ========== GAME ==========
+    def start_game(self):
+        self.send_cmd(CMD_START)
+        self.menu.destroy()
+        self.create_game()
 
-        # --- ЛІВА ПАНЕЛЬ (Кнопки 1-9 та порожня) ---
-        left_panel = tk.Frame(self.game_frame)
-        left_panel.pack(side=tk.LEFT, fill=tk.Y, padx=20)
+    def create_game(self):
+        self.game = tk.Frame(self.root)
+        self.game.pack(expand=True, fill="both", padx=20, pady=20)
 
-        tk.Label(left_panel, text="Ввід:", font=("Arial", 12, "bold")).pack(pady=(0, 10))
+        # LEFT PANEL
+        left = tk.Frame(self.game)
+        left.pack(side=tk.LEFT, fill=tk.Y)
 
-        btn_grid = tk.Frame(left_panel)
-        btn_grid.pack()
+        tk.Label(left, text="Цифри",
+                 font=("Segoe UI", 14)).pack(pady=5)
 
-        # Кнопки 1-9
+        pad = tk.Frame(left)
+        pad.pack()
         for i in range(1, 10):
-            btn = tk.Button(btn_grid, text=str(i), width=4, height=2, font=("Arial", 12),
-                            command=lambda x=i: self.send_data(x))
-            btn.grid(row=(i-1)//3, column=(i-1)%3, padx=2, pady=2)
+            tk.Button(pad, text=str(i),
+                      width=5, height=2,
+                      command=lambda n=i: self.set_value(n))\
+                .grid(row=(i-1)//3, column=(i-1)%3, padx=2, pady=2)
 
-        # ПОРОЖНЯ КНОПКА (замість 0)
-        self.btn_empty = tk.Button(left_panel, text="", width=14, height=2, font=("Arial", 12),
-                                   bg="#eeeeee", command=lambda: self.send_data(0))
-        self.btn_empty.pack(pady=5)
-        
-        btn_back = tk.Button(left_panel, text="Exit to Menu", bg="#ffcccc", command=self.back_to_menu)
-        btn_back.pack(side=tk.BOTTOM, pady=20)
+        tk.Button(left, text="CLEAR CELL", width=18,
+                  command=lambda: self.set_value(0)).pack(pady=8)
 
-        # --- ПРАВА ПАНЕЛЬ (Сітка 9x9) ---
-        right_panel = tk.Frame(self.game_frame)
-        right_panel.pack(side=tk.RIGHT, expand=True)
+        tk.Button(left, text="CLEAR ALL", width=18,
+                  command=lambda: self.send_cmd(CMD_CLEARALL)).pack(pady=4)
 
-        self.cells = [[None for _ in range(9)] for _ in range(9)]
+        tk.Button(left, text="RESTART", width=18,
+                  command=lambda: self.send_cmd(CMD_RESTART)).pack(pady=4)
+
+        tk.Button(left, text="GIVE UP", width=18,
+                  command=lambda: self.send_cmd(CMD_GIVEUP)).pack(pady=4)
+
+        tk.Button(left, text="FIELD / PROGRESS", width=18,
+                  command=lambda: self.send_cmd(CMD_FIELD)).pack(pady=12)
+
+        # GRID
+        grid = tk.Frame(self.game, bg="black", bd=3)
+        grid.pack(side=tk.RIGHT, padx=20)
+
         for r in range(9):
             for c in range(9):
-                pady, padx = (0, 0), (0, 0)
-                if r % 3 == 0 and r != 0: pady = (5, 0)
-                if c % 3 == 0 and c != 0: padx = (5, 0)
+                cell = tk.Label(
+                    grid, text="", width=2, height=1,
+                    font=("Segoe UI", 20, "bold"),
+                    bg="white", fg="black",
+                    relief="solid", bd=1
+                )
 
-                cell = tk.Entry(right_panel, width=2, font=('Arial', 18), justify='center')
+                padx = (1, 4) if (c+1) % 3 == 0 else (1, 1)
+                pady = (1, 4) if (r+1) % 3 == 0 else (1, 1)
+
                 cell.grid(row=r, column=c, padx=padx, pady=pady)
+                cell.bind("<Button-1>",
+                          lambda e, rr=r, cc=c: self.select_cell(rr, cc))
                 self.cells[r][c] = cell
 
-    def send_data(self, number):
-        if self.ser and self.ser.is_open:
-            try:
-                self.ser.write(str(number).encode())
-                print(f"Sent to STM32: {number}")
-            except Exception as e:
-                print(f"Send error: {e}")
+    def select_cell(self, r, c):
+        pr, pc = self.selected_cell
+        self.cells[pr][pc].config(bg="white")
+        self.selected_cell = (r, c)
+        self.cells[r][c].config(bg="#bbdefb")
+        self.status.config(text=f"Клітинка: {r},{c}")
+
+    def set_value(self, val):
+        r, c = self.selected_cell
+        if val == 0:
+            self.send_cmd(CMD_CLEAR, r, c)
         else:
-            print(f"No connection. Action for: {number}")
+            self.send_cmd(CMD_SET, r, c, val)
 
-    def back_to_menu(self):
-        if self.ser and self.ser.is_open:
-            self.ser.close()
-        self.game_frame.destroy()
-        self.status_label.config(text="Waiting for connection...", bg="#f0f0f0")
-        self.create_menu_screen()
+    # ========== FIELD UPDATE ==========
+    def update_field(self, field, status):
+        for i, v in enumerate(field):
+            r = i // 9
+            c = i % 9
+            self.cells[r][c].config(text="" if v == 0 else str(v))
 
+        self.status.config(
+            text=STATUS_MAP.get(status, "UNKNOWN")
+        )
+
+
+# ================= START =================
 if __name__ == "__main__":
     root = tk.Tk()
-    app = GameInterface(root)
+    SudokuGUI(root)
     root.mainloop()
