@@ -1,26 +1,41 @@
 #include "main.h"
 #include "usart.h"
 #include "gpio.h"
+#include <string.h>
+#include <stdint.h>
+
 
 
 uint8_t rx_buf[5];
 uint8_t tx_buf[6];
-uint8_t matrix[9][9] = {0};
-uint8_t packet[83];
+//uint8_t matrix[9][9] = {1};
+uint8_t matrix[9][9] = {
+    {5, 0, 6, 2, 0, 8, 7, 0, 3},
+    {2, 7, 1, 3, 0, 5, 0, 0, 0},
+    {8, 0, 9, 6, 1, 7, 0, 0, 5},
+
+    {0, 0, 0, 7, 0, 6, 0, 2, 8},
+    {3, 8, 4, 1, 2, 0, 0, 0, 0},
+    {6, 2, 7, 0, 8, 4, 3, 9, 0},
+
+    {0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 3, 1, 5, 4, 0},
+    {4, 1, 3, 9, 5, 0, 0, 8, 9}
+};
+uint8_t packet[84];
 uint8_t arr_y[9];
 uint8_t arr_x[9];
-/* Оголошення змінних */
- uint8_t rx_buffer[5]; // Буфер для 5 байт
+uint8_t arr_b3[9];
 
 
 // CMD
-#define CMD_START     0x01
-#define CMD_RESTART   0x02
-#define CMD_GIVEUP    0x03
-#define CMD_SET       0x04
-#define CMD_CLEAR     0x05
-#define CMD_CLEARALL  0x06
-#define CMD_FIELD     0x07
+#define CMD_START     0x1
+#define CMD_RESTART   0x2
+#define CMD_GIVEUP    0x3
+#define CMD_SET       0x4
+#define CMD_CLEAR     0x5
+#define CMD_CLEARALL  0x6
+#define CMD_FIELD     0x7
 
 // STATUS
 #define STATUS_OK       0x10
@@ -38,26 +53,139 @@ void send_response(uint8_t cmd, uint8_t status, uint8_t b1, uint8_t b2, uint8_t 
 
 int main(void)
 {
+
+
   HAL_Init();
+
+
   SystemClock_Config();
+
+
   MX_GPIO_Init();
   MX_USART2_UART_Init();
 
-  /* ВИДАЛІТЬ АБО ЗАКОМЕНТУЙТЕ ЦЕЙ РЯДОК: */
-  // HAL_UART_Receive_IT(&huart2, rx_buf, 5);
+  HAL_UART_Receive_IT(&huart2, rx_buf, 5);
 
   while (1)
+
   {
-      // Тепер функція реально чекатиме на прихід 5 байт
-      if (HAL_UART_Receive(&huart2, rx_buffer, 5, HAL_MAX_DELAY) == HAL_OK)
-      {
-          // Як тільки 5 байт отримано — миттєво відправляємо їх назад
-          HAL_UART_Transmit(&huart2, rx_buffer, 5, 100);
+
+
       }
+
   }
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart->Instance == USART2)
+    {
+        uint8_t cmd = rx_buf[0];
+        uint8_t b1  = rx_buf[1];
+        uint8_t b2  = rx_buf[2];
+        uint8_t b3  = rx_buf[3];
+        uint8_t chk = rx_buf[4];
+
+        //uint8_t calc_chk = cmd ^ b1 ^ b2 ^ b3;// поміняти чек суму на нашу
+
+       /*if (chk != calc_chk)
+        {
+            send_response(cmd, STATUS_CHKERR, 0, 0, 0);
+        }
+        else
+        {*/
+            process_command(cmd, b1, b2, b3);
+       // }
+
+        // знову чекаємо 5 байтів
+       // HAL_UART_Receive_IT(&huart2, rx_buf, 5);
+    }
+}
+
+void process_command(uint8_t cmd, uint8_t b1, uint8_t b2, uint8_t b3) {
+    switch (cmd)
+    {
+        case CMD_START:
+                send_response(cmd, STATUS_OK,0,0,0);
+
+            break;
+
+        case CMD_RESTART://зробити так щоб щоб або заново стартувала новарандом матриця
+
+            send_response(cmd, STATUS_OK,0,0,0);
+            break;
+
+        case CMD_GIVEUP://вертати на початкове меню
+
+            send_response(cmd, STATUS_LOSE,0,0,0);
+            break;
+
+       case CMD_SET://реалізувати умову при якій надсилається окей або фол
+         int j=0;
+            if (b3!=0 /*&& додати доп умову на заблоковані клітинки*/){
+                send_response(cmd, STATUS_INVALID,0,0,0);
+              }
+            else {
+              for(int i=0; i<9; i++){
+                arr_x[i] =matrix[i][b2] ;
+                arr_y[i] =matrix[b1][i] ;
+                arr_b3[i] = b3;
+                }
+              for(int i=0; i<9; i++){
+              if(arr_b3[i]!=arr_x[i] && arr_b3[i] != arr_y[i]) {
+                j=1;  }
+                }
+              if(j==0){
+                send_response(cmd, STATUS_OK,b1,b2,b3);
+              }
+            }
+            break;
+
+        case CMD_CLEAR://ніби норм
+            send_response(cmd, STATUS_OK,b1,b2,0);
+            break;
+
+        case CMD_CLEARALL://очистити все і загрузити рандомну матрицю з початку
+            send_response(cmd, STATUS_OK,0,0,0);
+            break;
+
+        case CMD_FIELD://статус гри
+            send_response(cmd, STATUS_OK,0,0,0);
+            break;
+
+        default://придумати щось цікаве
+            send_response(cmd, STATUS_INVALID,0,0,0);
+            break;
+    }
 }
 
 
+void send_response(uint8_t cmd, uint8_t status, uint8_t b1, uint8_t b2, uint8_t b3 )
+{
+    tx_buf[0] = cmd;
+    tx_buf[1] = status;
+    tx_buf[2] = b1;
+    tx_buf[3] = b2;
+    tx_buf[4] = b3;
+    tx_buf[5] = cmd ^ b1 ^ b2 ^ b3;
+    if(cmd==CMD_START){
+      packet[0] = cmd;
+            packet[1] = status;
+            for(int i=0; i<9; i++){
+                for(int j=0; j<9; j++){
+                    packet[2 + i*9 + j] = matrix[i][j];
+                }
+            }
+
+            packet[83] = cmd ^ status;
+
+            HAL_UART_Transmit(&huart2, packet, 84, HAL_MAX_DELAY);
+    }
+
+
+    HAL_UART_Transmit(&huart2, tx_buf, 6, HAL_MAX_DELAY);
+
+
+}
 /*
     !           !           !
     !           !           !
