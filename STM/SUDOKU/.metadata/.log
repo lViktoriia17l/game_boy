@@ -1,0 +1,85 @@
+!SESSION 2026-01-15 14:11:31.841 -----------------------------------------------
+eclipse.buildId=Version 2.0.0
+java.version=21.0.8
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=win32, ARCH=x86_64, WS=win32, NL=uk_UA
+Framework arguments:  E:\Work\ZViT\game_boy\STM\SUDOKU\.project
+Command-line arguments:  -os win32 -ws win32 -arch x86_64 E:\Work\ZViT\game_boy\STM\SUDOKU\.project
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2026-01-15 14:11:50.278
+!MESSAGE Log4j2 initialized with config file E:\Work\ZViT\game_boy\STM\SUDOKU\.metadata\.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2026-01-15 14:11:52.740
+!MESSAGE Started RMI Server, listening on port 41337
+
+!ENTRY com.st.stm32cube.ide.mpu.remote.serial 1 1 2026-01-15 14:11:57.686
+!MESSAGE Executed PowerShell command powershell.exe -Command "Get-CimInstance -ClassName Win32_SerialPort | Select-Object -ExpandProperty DeviceID":
+COM3
+
+
+!ENTRY com.st.stm32cube.ide.mpu.remote.serial 1 1 2026-01-15 14:11:57.688
+!MESSAGE port: COM3
+!SESSION 2026-01-20 12:29:25.011 -----------------------------------------------
+eclipse.buildId=Version 2.0.0
+java.version=21.0.8
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=win32, ARCH=x86_64, WS=win32, NL=uk_UA
+Command-line arguments:  -os win32 -ws win32 -arch x86_64
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2026-01-20 12:29:33.009
+!MESSAGE Log4j2 initialized with config file E:\Work\ZViT\test\game_boy\STM\SUDOKU\.metadata\.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2026-01-20 12:29:35.829
+!MESSAGE Started RMI Server, listening on port 41338
+!SESSION 2026-01-20 12:30:30.369 -----------------------------------------------
+eclipse.buildId=Version 2.0.0
+java.version=21.0.8
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=win32, ARCH=x86_64, WS=win32, NL=uk_UA
+Framework arguments:  E:\Work\ZViT\test\game_boy\STM\SUDOKU\.project
+Command-line arguments:  -os win32 -ws win32 -arch x86_64 E:\Work\ZViT\test\game_boy\STM\SUDOKU\.project
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2026-01-20 12:30:35.159
+!MESSAGE Log4j2 initialized with config file E:\Work\ZViT\test\game_boy\STM\SUDOKU\.metadata\.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2026-01-20 12:30:38.005
+!MESSAGE Started RMI Server, listening on port 41337
+!SESSION 2026-01-20 12:31:50.785 -----------------------------------------------
+eclipse.buildId=Version 2.0.0
+java.version=21.0.8
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=win32, ARCH=x86_64, WS=win32, NL=uk_UA
+Framework arguments:  E:\Work\ZViT\test\game_boy\STM\SUDOKU\.project
+Command-line arguments:  -os win32 -ws win32 -arch x86_64 E:\Work\ZViT\test\game_boy\STM\SUDOKU\.project
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2026-01-20 12:31:57.017
+!MESSAGE Log4j2 initialized with config file E:\Work\ZViT\test\game_boy\STM\SUDOKU\.metadata\.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2026-01-20 12:31:59.961
+!MESSAGE Started RMI Server, listening on port 41337
+!SESSION 2026-01-20 12:32:18.917 -----------------------------------------------
+eclipse.buildId=Version 2.0.0
+java.version=21.0.8
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=win32, ARCH=x86_64, WS=win32, NL=uk_UA
+Framework arguments:  E:\Work\ZViT\test\game_boy\STM\SUDOKU\.cproject
+Command-line arguments:  -os win32 -ws win32 -arch x86_64 E:\Work\ZViT\test\game_boy\STM\SUDOKU\.cproject
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2026-01-20 12:32:33.868
+!MESSAGE Log4j2 initialized with config file E:\Work\ZViT\test\game_boy\STM\SUDOKU\.metadata\.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2026-01-20 12:32:36.481
+!MESSAGE Started RMI Server, listening on port 41337
+!SESSION 2026-01-20 12:32:50.110 -----------------------------------------------
+eclipse.buildId=Version 2.0.0
+java.version=21.0.8
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=win32, ARCH=x86_64, WS=win32, NL=uk_UA
+Framework arguments:  E:\Work\ZViT\test\game_boy\STM\SUDOKU\.project
+Command-line arguments:  -os win32 -ws win32 -arch x86_64 E:\Work\ZViT\test\game_boy\STM\SUDOKU\.project
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2026-01-20 12:32:58.370
+!MESSAGE Log4j2 initialized with config file E:\Work\ZViT\test\game_boy\STM\SUDOKU\.metadata\.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2026-01-20 12:33:01.054
+!MESSAGE Started RMI Server, listening on port 41337

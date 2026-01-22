@@ -98,6 +98,7 @@ class SudokuGUI:
         tk.Label(self.overlay, text="ЗВ'ЯЗОК ВТРАЧЕНО", font=("Arial", 28, "bold"), fg="#e74c3c", bg="#2c3e50").pack(expand=True)
         tk.Label(self.overlay, text=f"Очікування порту {self.last_port}...", fg="white", bg="#2c3e50").pack(pady=20)
 
+
     def reconnect_loop(self):
         while self.is_reconnecting:
             if self.last_port in [p.device for p in serial.tools.list_ports.comports()]:
@@ -178,6 +179,7 @@ class SudokuGUI:
 
         grid_frame = tk.Frame(self.game_container, bg="#2c3e50", bd=2)
         grid_frame.pack(side=tk.RIGHT)
+
 
         for r in range(9):
             for c in range(9):
