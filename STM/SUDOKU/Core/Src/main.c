@@ -8,7 +8,7 @@
 
 uint8_t rx_buf[5];
 uint8_t tx_buf[6];
-//uint8_t matrix[9][9] = {1};
+uint8_t matall[9][9] = {0};
 uint8_t matrix[9][9] = {
     {5, 0, 6, 2, 0, 8, 7, 0, 3},
     {2, 7, 1, 3, 0, 5, 0, 0, 0},
@@ -20,7 +20,7 @@ uint8_t matrix[9][9] = {
 
     {0, 0, 0, 0, 0, 0, 0, 0, 0},
     {0, 0, 0, 0, 3, 1, 5, 4, 0},
-    {4, 1, 3, 9, 5, 0, 0, 8, 9}
+    {4, 1, 3, 9, 5, 0, 0, 8, 0}
 };
 uint8_t packet[84];
 uint8_t arr_y[9];
@@ -49,7 +49,18 @@ uint8_t arr_b3[9];
 void SystemClock_Config(void);
 void process_command(uint8_t cmd, uint8_t b1, uint8_t b2, uint8_t b3);
 void send_response(uint8_t cmd, uint8_t status, uint8_t b1, uint8_t b2, uint8_t b3);
+uint16_t c_zero(uint8_t m[9][9]) {
+    uint16_t zeros = 0;
 
+    for (int i = 0; i < 9; i++) {
+        for (int j = 0; j < 9; j++) {
+            if (m[i][j] == 0) {
+                zeros++;
+            }
+        }
+    }
+    return zeros;
+}
 
 int main(void)
 {
@@ -65,6 +76,12 @@ int main(void)
   MX_USART2_UART_Init();
 
   HAL_UART_Receive_IT(&huart2, rx_buf, 5);
+
+  for(int i=0; i<9; i++){
+                 for(int j=0; j<9; j++){
+                     matall[i][j] = matrix[i][j];
+                 }
+             }
 
   while (1)
 
@@ -85,19 +102,19 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         uint8_t b3  = rx_buf[3];
         uint8_t chk = rx_buf[4];
 
-        //uint8_t calc_chk = cmd ^ b1 ^ b2 ^ b3;// поміняти чек суму на нашу
+        uint8_t calc_chk = cmd ^ b1 ^ b2 ^ b3;// поміняти чек суму на нашу
 
-       /*if (chk != calc_chk)
+       if (chk != calc_chk)
         {
             send_response(cmd, STATUS_CHKERR, 0, 0, 0);
         }
         else
-        {*/
+        {
             process_command(cmd, b1, b2, b3);
-       // }
+        }
 
         // знову чекаємо 5 байтів
-       // HAL_UART_Receive_IT(&huart2, rx_buf, 5);
+        HAL_UART_Receive_IT(&huart2, rx_buf, 5);
     }
 }
 
@@ -121,10 +138,7 @@ void process_command(uint8_t cmd, uint8_t b1, uint8_t b2, uint8_t b3) {
 
        case CMD_SET://реалізувати умову при якій надсилається окей або фол
          int j=0;
-            if (b3!=0 /*&& додати доп умову на заблоковані клітинки*/){
-                send_response(cmd, STATUS_INVALID,0,0,0);
-              }
-            else {
+
               for(int i=0; i<9; i++){
                 arr_x[i] =matrix[i][b2] ;
                 arr_y[i] =matrix[b1][i] ;
@@ -137,7 +151,10 @@ void process_command(uint8_t cmd, uint8_t b1, uint8_t b2, uint8_t b3) {
               if(j==0){
                 send_response(cmd, STATUS_OK,b1,b2,b3);
               }
-            }
+              if(j==1){
+            	  send_response(cmd, STATUS_INVALID,b1,b2,b3);
+              }
+
             break;
 
         case CMD_CLEAR://ніби норм
@@ -149,7 +166,7 @@ void process_command(uint8_t cmd, uint8_t b1, uint8_t b2, uint8_t b3) {
             break;
 
         case CMD_FIELD://статус гри
-            send_response(cmd, STATUS_OK,0,0,0);
+            send_response(cmd, STATUS_OK,c_zero(matrix[9][9]),c_zeros(matall[9][9]),0);
             break;
 
         default://придумати щось цікаве
@@ -161,29 +178,48 @@ void process_command(uint8_t cmd, uint8_t b1, uint8_t b2, uint8_t b3) {
 
 void send_response(uint8_t cmd, uint8_t status, uint8_t b1, uint8_t b2, uint8_t b3 )
 {
-    tx_buf[0] = cmd;
-    tx_buf[1] = status;
-    tx_buf[2] = b1;
-    tx_buf[3] = b2;
-    tx_buf[4] = b3;
-    tx_buf[5] = cmd ^ b1 ^ b2 ^ b3;
-    if(cmd==CMD_START){
-      packet[0] = cmd;
-            packet[1] = status;
-            for(int i=0; i<9; i++){
-                for(int j=0; j<9; j++){
-                    packet[2 + i*9 + j] = matrix[i][j];
-                }
-            }
+	if(cmd==CMD_START||cmd==CMD_RESTART){
+	      packet[0] = cmd;
+	            packet[1] = status;
+	            for(int i=0; i<9; i++){
+	                for(int j=0; j<9; j++){
+	                    packet[2 + i*9 + j] = matrix[i][j];
+	                }
+	            }
 
-            packet[83] = cmd ^ status;
+	            packet[83] = cmd ^ status;
 
-            HAL_UART_Transmit(&huart2, packet, 84, HAL_MAX_DELAY);
-    }
+	            HAL_UART_Transmit(&huart2, packet, 84, HAL_MAX_DELAY);
+	    }
+	/*else if(cmd==CMD_){
+	    	packet[0] = cmd;
+	    	            packet[1] = status;
+	    	            for(int i=0; i<9; i++){
+	    	                for(int j=0; j<9; j++){
+	    	                    packet[2 + i*9 + j] = matrix[i][j];
+	    	                }
+	    	            }
 
+	    	            packet[83] = cmd ^ status;
+
+	    	            HAL_UART_Transmit(&huart2, packet, 84, HAL_MAX_DELAY);
+
+	    }*/
+
+	else {
+		tx_buf[0] = cmd;
+		tx_buf[1] = status;
+		tx_buf[2] = b1;
+		tx_buf[3] = b2;
+		tx_buf[4] = b3;
+		tx_buf[5] = cmd ^ b1 ^ b2 ^ b3;
+
+			if (cmd==CMD_SET && status==STATUS_OK ){
+				matall[b1][b2]=b3;
+		}
 
     HAL_UART_Transmit(&huart2, tx_buf, 6, HAL_MAX_DELAY);
-
+			}
 
 }
 /*
@@ -245,7 +281,6 @@ void Error_Handler(void)
 
 }
 #ifdef USE_FULL_ASSERT
-
 void assert_failed(uint8_t *file, uint32_t line)
 {
 
