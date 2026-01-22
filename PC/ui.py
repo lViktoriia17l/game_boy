@@ -24,7 +24,7 @@ STATUS_MAP = {
 }
 
 class SudokuGUI:
-    def __init__(self, root):
+    def init(self, root):
         self.root = root
         self.root.title("STM32 Sudoku - Full Debug Mode")
         self.root.geometry("950x670")
@@ -35,6 +35,7 @@ class SudokuGUI:
 
         self.selected_cell = (0, 0)
         self.cells = [[None]*9 for _ in range(9)]
+        self.locked_cells = set() # Зберігаємо координати заблокованих клітинок
         
         self.status_bar = tk.Label(root, text="Підключіть мікроконтролер",
                                    relief=tk.SUNKEN, anchor="w", font=("Arial", 10))
@@ -45,7 +46,6 @@ class SudokuGUI:
 
     # ========== SERIAL CORE (XOR CHECKSUM) ==========
     def checksum(self, *data):
-        """Обчислення контрольної суми через XOR (^)"""
         return reduce(lambda x, y: x ^ y, data)
 
     def send_cmd(self, cmd, b1=0, b2=0, b3=0):
@@ -55,34 +55,21 @@ class SudokuGUI:
             crc = self.checksum(cmd, b1, b2, b3)
             pkt = bytes([cmd, b1, b2, b3, crc])
             self.ser.write(pkt)
-            # TX — це те, що ми ВІДПРАВЛЯЄМО
             print(f"[TX] -> {pkt.hex(' ').upper()} (XOR CRC: {hex(crc)})")
         except (serial.SerialException, OSError):
             self.handle_disconnect()
 
     def rx_thread(self):
-        """Слухаємо контролер та виводимо все, що він шле"""
         buffer = bytearray()
-        print("[SYSTEM] Потік читання запущено...")
-        
         while self.ser and self.ser.is_open:
             try:
                 if self.ser.in_waiting > 0:
-                    # Читаємо всі доступні байти
                     chunk = self.ser.read(self.ser.in_waiting)
-                    
-                    # RAW RX — показує БУДЬ-ЯКІ байти відразу при надходженні
-                    print(f"[RAW RX] <- {chunk.hex(' ').upper()}")
-                    
                     buffer.extend(chunk)
                     
-                    # Якщо назбирали повний пакет (84 байти)
                     while len(buffer) >= 84:
                         packet = list(buffer[:84])
                         buffer = buffer[84:]
-                        
-                        print(f"\n[RX SUCCESS] !!! ОТРИМАНО ПОВНИЙ ПАКЕТ (84 байти) !!!")
-                        print(f"      Header: {hex(packet[0])} | Status: {hex(packet[1])}")
                         
                         matrix_data = packet[2:83]
                         status_byte = packet[1]
@@ -90,7 +77,6 @@ class SudokuGUI:
                 else:
                     time.sleep(0.01)
             except Exception as e:
-                print(f"[ERROR] Помилка читання: {e}")
                 if not self.is_reconnecting:
                     self.root.after(0, self.handle_disconnect)
                 break
@@ -112,7 +98,6 @@ class SudokuGUI:
         tk.Label(self.overlay, text="ЗВ'ЯЗОК ВТРАЧЕНО", font=("Arial", 28, "bold"), fg="#e74c3c", bg="#2c3e50").pack(expand=True)
         tk.Label(self.overlay, text=f"Очікування порту {self.last_port}...", fg="white", bg="#2c3e50").pack(pady=20)
 
-
     def reconnect_loop(self):
         while self.is_reconnecting:
             if self.last_port in [p.device for p in serial.tools.list_ports.comports()]:
@@ -123,11 +108,11 @@ class SudokuGUI:
                     return
                 except: pass
             time.sleep(1)
-
-    def on_reconnect_success(self):
+            def on_reconnect_success(self):
         if self.overlay: self.overlay.destroy(); self.overlay = None
         self.status_bar.config(text=f"Зв'язок відновлено: {self.last_port}", fg="green")
         threading.Thread(target=self.rx_thread, daemon=True).start()
+        self.locked_cells.clear() # Очищуємо при перепідключенні
         self.root.after(500, lambda: self.send_cmd(CMD_FIELD))
 
     # ========== GUI SETUP ==========
@@ -189,11 +174,10 @@ class SudokuGUI:
                   command=lambda: self.send_cmd(CMD_FIELD)).grid(row=5, column=0, columnspan=3, pady=5)
         
         tk.Button(ctrl, text="RESTART", width=22, bg="#ffeaa7",
-                  command=lambda: self.send_cmd(CMD_RESTART)).grid(row=6, column=0, columnspan=3, pady=5)
+                  command=lambda: self.restart_action()).grid(row=6, column=0, columnspan=3, pady=5)
 
         grid_frame = tk.Frame(self.game_container, bg="#2c3e50", bd=2)
         grid_frame.pack(side=tk.RIGHT)
-
 
         for r in range(9):
             for c in range(9):
@@ -206,40 +190,81 @@ class SudokuGUI:
                 self.cells[r][c] = cell
         
         self.select_cell(0, 0)
+        # ========== LOGIC ACTIONS ==========
+    def restart_action(self):
+        self.locked_cells.clear() # Скидаємо блокування при рестарті
+        self.send_cmd(CMD_RESTART)
 
-    # ========== LOGIC ACTIONS ==========
     def select_cell(self, r, c):
-        self.cells[self.selected_cell[0]][self.selected_cell[1]].config(bg="white")
+        # Повертаємо попередній клітинці її колір (білий або сірий)
+        prev_r, prev_c = self.selected_cell
+        bg_color = "#f0f0f0" if (prev_r, prev_c) in self.locked_cells else "white"
+        self.cells[prev_r][prev_c].config(bg=bg_color)
+        
         self.selected_cell = (r, c)
-        self.cells[r][c].config(bg="#74b9ff")
-        self.status_bar.config(text=f"Клітинка: [{r+1}, {c+1}]")
+        self.cells[r][c].config(bg="#74b9ff") # Колір виділення
+        
+        status_text = f"Клітинка: [{r+1}, {c+1}]"
+        if (r, c) in self.locked_cells:
+            status_text += " (ЗАБЛОКОВАНО)"
+        self.status_bar.config(text=status_text)
 
     def set_value_action(self, val):
         r, c = self.selected_cell
         
-        # Миттєва реакція GUI (синім)
+        # ЗАБОРОНА: якщо клітинка в списку заблокованих, нічого не робимо
+        if (r, c) in self.locked_cells:
+            self.status_bar.config(text=f"Помилка: Клітинка [{r+1}, {c+1}] згенерована системою!", fg="red")
+            return
+
+        # Візуальна зміна (синім кольором як "чернетка")
         self.cells[r][c].config(text=str(val) if val != 0 else "", fg="#0984e3")
         
-        # Відправка на МК
         if val == 0:
             self.send_cmd(CMD_CLEAR, r, c)
         else:
             self.send_cmd(CMD_SET, r, c, val)
         
-        # Просимо оновлення поля через 150мс
+        # Оновлення через 150мс для підтвердження від МК
         self.root.after(150, lambda: self.send_cmd(CMD_FIELD))
 
     def update_field(self, field_data, status):
-        """Оновлення від контролера (колір стає чорним)"""
         if len(field_data) < 81: return
         
         for i in range(81):
             val = field_data[i]
             r, c = i // 9, i % 9
-            self.cells[r][c].config(text=str(val) if val != 0 else "", fg="#2d3436")
-        
+            
+            # Якщо ми отримали початкове поле, і в клітинці вже є цифра
+            # вважаємо її заблокованою (locked)
+            if val != 0 and status == 0x10 and not self.locked_cells:
+                # Це відбувається зазвичай лише при першому отриманні поля після Start
+                # (якщо locked_cells ще порожня)
+                pass
+
+            # Оновлюємо текст
+            self.cells[r][c].config(text=str(val) if val != 0 else "")
+            
+            # Якщо статус 0x12 прийшов від МК — додаємо клітинку в locked на льоту
+            if status == 0x12 and r == self.selected_cell[0] and c == self.selected_cell[1]:
+                self.locked_cells.add((r, c))
+
+            # Візуальне оформлення заблокованих клітинок
+            if (r, c) in self.locked_cells:
+                self.cells[r][c].config(fg="#2d3436", bg="#f0f0f0") # Темно-сірий текст, сірий фон
+            else:
+                # Звичайні клітинки, які ввів користувач
+                if self.cells[r][c].cget("bg") != "#74b9ff": # Якщо не виділена зараз
+                    self.cells[r][c].config(fg="#0984e3", bg="white")
+
+        # Якщо контролер прямо каже, що ми наступили на заблоковану клітинку
+        if status == 0x12:
+            self.locked_cells.add(self.selected_cell)
+            self.cells[self.selected_cell[0]][self.selected_cell[1]].config(bg="#f0f0f0")
+
         txt = STATUS_MAP.get(status, f"Код: {hex(status)}")
-        self.status_bar.config(text=f"Статус гри: {txt}")
+        color = "red" if status == 0x12 else "black"
+        self.status_bar.config(text=f"Статус гри: {txt}", fg=color)
 
 if __name__ == "__main__":
     root = tk.Tk()
