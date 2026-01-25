@@ -1,0 +1,286 @@
+#include "main.h"
+#include "usart.h"
+#include "gpio.h"
+#include <string.h>
+#include <stdint.h>
+
+
+
+uint8_t rx_buf[5];
+uint8_t tx_buf[6];
+uint8_t matall[9][9] = {0};
+uint8_t matrix[9][9] = {
+    {5, 0, 6, 2, 0, 8, 7, 0, 3},
+    {2, 7, 1, 3, 0, 5, 0, 0, 0},
+    {8, 0, 9, 6, 1, 7, 0, 0, 5},
+
+    {0, 0, 0, 7, 0, 6, 0, 2, 8},
+    {3, 8, 4, 1, 2, 0, 0, 0, 0},
+    {6, 2, 7, 0, 8, 4, 3, 9, 0},
+
+    {0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 3, 1, 5, 4, 0},
+    {4, 1, 3, 9, 5, 0, 0, 8, 0}
+};
+uint8_t packet[84];
+uint8_t arr_y[9];
+uint8_t arr_x[9];
+uint8_t arr_b3[9];
+
+
+// CMD
+#define CMD_START     0x1
+#define CMD_RESTART   0x2
+#define CMD_GIVEUP    0x3
+#define CMD_SET       0x4
+#define CMD_CLEAR     0x5
+#define CMD_FIELD     0x7
+
+// STATUS
+#define STATUS_OK       0x10
+#define STATUS_INVALID  0x11
+#define STATUS_LOCKED   0x12
+#define STATUS_CHKERR   0x13
+#define STATUS_LOSE     0x14
+#define STATUS_WIN      0x15
+#define STATUS_FAIL     0x16
+
+void SystemClock_Config(void);
+void process_command(uint8_t cmd, uint8_t b1, uint8_t b2, uint8_t b3);
+void send_response(uint8_t cmd, uint8_t status, uint8_t b1, uint8_t b2, uint8_t b3);
+uint8_t c_zero(uint8_t m[9][9]);
+uint8_t rulle_game(uint8_t b1, uint8_t b2, uint8_t b3);
+
+int main(void) {
+  HAL_Init();
+  SystemClock_Config();
+  MX_GPIO_Init();
+  MX_USART2_UART_Init();
+
+  HAL_UART_Receive_IT(&huart2, rx_buf, 5);
+
+  memcpy(matall, matrix, sizeof(matrix));
+
+  while (1)
+
+  {     }
+
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart->Instance == USART2)
+    {
+        uint8_t cmd = rx_buf[0];
+        uint8_t b1  = rx_buf[1];
+        uint8_t b2  = rx_buf[2];
+        uint8_t b3  = rx_buf[3];
+        uint8_t chk = rx_buf[4];
+
+       uint8_t calc_chk = cmd ^ b1 ^ b2 ^ b3;// поміняти чек суму на нашу
+
+       if (chk != calc_chk)
+        {
+            send_response(cmd, STATUS_CHKERR, 0, 0, 0);
+        }
+        else
+        {
+            process_command(cmd, b1, b2, b3);
+        }
+
+        // знову чекаємо 5 байтів
+        HAL_UART_Receive_IT(&huart2, rx_buf, 5);
+    }
+}
+
+void process_command(uint8_t cmd, uint8_t b1, uint8_t b2, uint8_t b3) {
+    switch (cmd)
+    {
+        case CMD_START:
+                send_response(cmd, STATUS_OK,0,0,0);
+
+            break;
+
+        case CMD_RESTART:
+
+            send_response(cmd, STATUS_OK,0,0,0);
+            break;
+
+        case CMD_GIVEUP://вертати на початкове меню
+
+            send_response(cmd, STATUS_LOSE,0,0,0);
+            break;
+
+       case CMD_SET://реалізувати умову при якій надсилається окей або фол
+
+         //  Чи це не початкова цифра
+         	 if (matrix[b1][b2] != 0) {
+                 send_response(cmd, STATUS_LOCKED, b1, b2, b3);
+                 break;
+         	 }
+         	 else if(rulle_game(b1, b2, b3)){
+         		matall[b1][b2] = b3;
+         		if (c_zero(matall) == 0) {
+         			send_response(cmd, STATUS_WIN, b1, b2, b3);
+         		}
+         		else{
+         			send_response(cmd, STATUS_OK, b1, b2, b3);
+         		}
+         	 }
+         	 else {
+         		 send_response(cmd, STATUS_INVALID,0,0,0);
+         	 }
+
+
+
+            break;
+
+        case CMD_CLEAR://ніби норм
+        	if (matrix[b1][b2] == 0) {
+        	      matall[b1][b2] = 0;
+        	      send_response(cmd, STATUS_OK, b1, b2, 0);
+        	            }
+        	else {
+
+        	      send_response(cmd, STATUS_LOCKED, b1, b2, 0);
+        	            }
+            break;
+
+
+        case CMD_FIELD://статус гри
+            send_response(cmd, STATUS_OK,c_zero(matrix),c_zero(matall),0);
+            break;
+
+        default://придумати щось цікаве
+            send_response(cmd, STATUS_INVALID,0,0,0);
+            break;
+    }
+}
+
+uint8_t rulle_game(uint8_t b1, uint8_t b2, uint8_t b3) {
+
+    for (int i = 0; i < 9; i++) {
+
+        if (matall[b1][i] == b3 || matall[i][b2] == b3) {
+            return 0;
+        }
+    }
+
+
+    int sR = (b1 / 3) * 3;
+    int sC = (b2 / 3) * 3;
+    for (int i = 0; i < 3; i++) {
+        for (int k = 0; k < 3; k++) {
+            if (matall[sR + i][sC + k] == b3) {
+                return 0;
+            }
+        }
+    }
+
+    return 1;
+}
+
+uint8_t c_zero(uint8_t m[9][9]) {
+    uint8_t count = 0;
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            if (m[i][j] == 0) count++;
+    return count;
+}
+
+void send_response(uint8_t cmd, uint8_t status, uint8_t b1, uint8_t b2, uint8_t b3 )
+{
+	if(cmd==CMD_START||cmd==CMD_RESTART){
+	      packet[0] = cmd;
+	      packet[1] = status;
+	            for(int i=0; i<9; i++){
+	                for(int j=0; j<9; j++){
+	                    packet[2 + i*9 + j] = matrix[i][j];
+	                }
+	            }
+
+	            packet[83] = cmd ^ status;
+	            HAL_UART_Transmit(&huart2, packet, 84, HAL_MAX_DELAY);
+
+	            memcpy(matall, matrix, sizeof(matrix));
+	    }
+
+	else {
+		tx_buf[0] = cmd;
+		tx_buf[1] = status;
+		tx_buf[2] = b1;
+		tx_buf[3] = b2;
+		tx_buf[4] = b3;
+		tx_buf[5] = cmd ^ b1 ^ b2 ^ b3;
+
+		HAL_UART_Transmit(&huart2, tx_buf, 6, HAL_MAX_DELAY);
+		}
+
+
+			}
+
+
+/*
+    !           !           !
+    !           !           !
+    !           !           !
+    !           !           !
+  !!!!!       !!!!!       !!!!!
+   !!!         !!!         !!!
+    !           !           !
+  все що з низу не рухати код по пизді іде
+    !           !           !
+   !!!         !!!         !!!
+  !!!!!       !!!!!       !!!!!
+    !           !           !
+    !           !           !
+    !           !           !
+    !           !           !
+  */
+
+
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL12;
+  RCC_OscInitStruct.PLL.PREDIV = RCC_PREDIV_DIV1;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+void Error_Handler(void)
+{
+   __disable_irq();
+  while (1)
+  {
+  }
+
+}
+#ifdef USE_FULL_ASSERT
+void assert_failed(uint8_t *file, uint32_t line)
+{
+
+}
+#endif

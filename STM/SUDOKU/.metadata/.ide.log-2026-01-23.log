@@ -1,0 +1,18 @@
+2026-01-23 11:24:10,881 [INFO] Activator:176 - 
+
+
+2026-01-23 11:24:10,888 [INFO] Activator:177 - !SESSION log4j initialized
+2026-01-23 11:24:16,481 [INFO] LogOutputStream:77 - [STDOUT_REDIRECT] 
+2026-01-23 12:23:13,869 [ERROR] ConfigurationRetriever:142 - IOException on connection: No subject alternative DNS name matching sw-center.st.com found.
+2026-01-23 12:23:13,903 [ERROR] ConfigurationRetriever:142 - IOException on connection: No subject alternative DNS name matching sw-center.st.com found.
+2026-01-23 12:23:13,936 [ERROR] ConfigurationRetriever:142 - IOException on connection: No subject alternative DNS name matching sw-center.st.com found.
+2026-01-23 12:38:53,913 [INFO] Activator:176 - 
+
+
+2026-01-23 12:38:53,915 [INFO] Activator:177 - !SESSION log4j initialized
+2026-01-23 12:38:58,278 [INFO] LogOutputStream:77 - [STDOUT_REDIRECT] 
+2026-01-23 22:41:47,190 [INFO] Activator:176 - 
+
+
+2026-01-23 22:41:47,192 [INFO] Activator:177 - !SESSION log4j initialized
+2026-01-23 22:41:51,040 [INFO] LogOutputStream:77 - [STDOUT_REDIRECT] 
