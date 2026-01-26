@@ -3,94 +3,81 @@
 #include "gpio.h"
 #include <string.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 
 
 uint8_t rx_buf[5];
 uint8_t tx_buf[6];
-uint8_t matall[9][9] = {0};
-uint8_t matrix[9][9] = {
-    {5, 0, 6, 2, 0, 8, 7, 0, 3},
-    {2, 7, 1, 3, 0, 5, 0, 0, 0},
-    {8, 0, 9, 6, 1, 7, 0, 0, 5},
-
-    {0, 0, 0, 7, 0, 6, 0, 2, 8},
-    {3, 8, 4, 1, 2, 0, 0, 0, 0},
-    {6, 2, 7, 0, 8, 4, 3, 9, 0},
-
-    {0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 3, 1, 5, 4, 0},
-    {4, 1, 3, 9, 5, 0, 0, 8, 0}
-};
+uint8_t matall[9][9] 	= {0};
+uint8_t matCHEAT[9][9]	= {0};
 uint8_t packet[84];
-uint8_t arr_y[9];
-uint8_t arr_x[9];
-uint8_t arr_b3[9];
+uint8_t matrix[9][9]	= {0};
+const uint8_t metalon[9][9] = {
+		{1, 2, 3,	4, 5, 6,	7, 8, 9},
+		{4, 5, 6,	7, 8, 9,	1, 2, 3},
+		{7, 8, 9,	1, 2, 3,	4, 5, 6},
+
+		{2, 3, 1,	5, 6, 4,	8, 9, 7},
+		{5, 6, 4,	8, 9, 7,	2, 3, 1},
+		{8, 9, 7,	2, 3, 1,	5, 6, 4},
+
+		{3, 1, 2,	6, 4, 5,	9, 7, 8},
+		{6, 4, 5,	9, 7, 8,	3, 1, 2},
+		{9, 7, 8,	3, 1, 2,	6, 4, 5}
+};
+
 
 
 // CMD
-#define CMD_START     0x1
-#define CMD_RESTART   0x2
-#define CMD_GIVEUP    0x3
-#define CMD_SET       0x4
-#define CMD_CLEAR     0x5
-#define CMD_CLEARALL  0x6
-#define CMD_FIELD     0x7
+#define CMD_START    	 	0x1
+#define CMD_RESTART  		0x2
+#define CMD_GIVEUP   		0x3
+#define CMD_SET      	 	0x4
+#define CMD_CLEAR    	 	0x5
+#define CMD_FIELD     		0x7
+#define CMD_DIFFICULTY		0x8
+#define CMD_HELP			0x98
+#define CMD_CHEAT   	  	0x99
 
 // STATUS
-#define STATUS_OK       0x10
-#define STATUS_INVALID  0x11
-#define STATUS_LOCKED   0x12
-#define STATUS_CHKERR   0x13
-#define STATUS_LOSE     0x14
-#define STATUS_WIN      0x15
-#define STATUS_FAIL     0x16
+#define STATUS_OK       	0x10
+#define STATUS_INVALID  	0x11
+#define STATUS_LOCKED   	0x12
+#define STATUS_CHKERR   	0x13
+#define STATUS_LOSE     	0x14
+#define STATUS_WIN      	0x15
+#define STATUS_SETDIF      	0x16
+#define STATUS_NOOB		    0x65
+#define STATUS_OK_CHEAT     0x66
+
 
 void SystemClock_Config(void);
 void process_command(uint8_t cmd, uint8_t b1, uint8_t b2, uint8_t b3);
 void send_response(uint8_t cmd, uint8_t status, uint8_t b1, uint8_t b2, uint8_t b3);
-uint16_t c_zero(uint8_t m[9][9]) {
-    uint16_t zeros = 0;
-
-    for (int i = 0; i < 9; i++) {
-        for (int j = 0; j < 9; j++) {
-            if (m[i][j] == 0) {
-                zeros++;
-            }
-        }
-    }
-    return zeros;
-}
-
-int main(void)
-{
+uint8_t c_zero(uint8_t m[9][9]);
+uint8_t rulle_game(uint8_t b1, uint8_t b2, uint8_t b3);
+void swap_rows(uint8_t m[9][9], uint8_t r1, uint8_t r2);
+void swap_cols(uint8_t m[9][9], uint8_t c1, uint8_t c2);
+void generate_sudoku(uint8_t difficulty);
 
 
-  HAL_Init();
+int main(void) {
+
+	HAL_Init();
+	SystemClock_Config();
+	MX_GPIO_Init();
+	MX_USART2_UART_Init();
 
 
-  SystemClock_Config();
 
-
-  MX_GPIO_Init();
-  MX_USART2_UART_Init();
-
-  HAL_UART_Receive_IT(&huart2, rx_buf, 5);
-
-  for(int i=0; i<9; i++){
-                 for(int j=0; j<9; j++){
-                     matall[i][j] = matrix[i][j];
-                 }
-             }
+	HAL_UART_Receive_IT(&huart2, rx_buf, 5);
 
   while (1)
 
-  {
+  {     }
 
-
-      }
-
-  }
+}
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
@@ -102,7 +89,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         uint8_t b3  = rx_buf[3];
         uint8_t chk = rx_buf[4];
 
-        uint8_t calc_chk = cmd ^ b1 ^ b2 ^ b3;// поміняти чек суму на нашу
+       uint8_t calc_chk = cmd ^ b1 ^ b2 ^ b3;// поміняти чек суму на нашу
 
        if (chk != calc_chk)
         {
@@ -121,90 +108,220 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 void process_command(uint8_t cmd, uint8_t b1, uint8_t b2, uint8_t b3) {
     switch (cmd)
     {
+    	case CMD_DIFFICULTY: {
+        	uint8_t dif = 0;
+
+
+        	if (b1 == 1) {
+        		dif = 25; // Easy
+        	}
+        	else if (b1 == 2) {
+        		dif = 45; // Medium
+        	}
+        	else if (b1 == 3) {
+        		dif = 65; // Hard
+        	}
+        		generate_sudoku(dif);
+        		send_response(cmd, STATUS_SETDIF, b1, b2, b3);
+
+        	break;
+    		}
+
+
         case CMD_START:
                 send_response(cmd, STATUS_OK,0,0,0);
 
             break;
 
-        case CMD_RESTART://зробити так щоб щоб або заново стартувала новарандом матриця
+
+        case CMD_RESTART:
 
             send_response(cmd, STATUS_OK,0,0,0);
             break;
+
 
         case CMD_GIVEUP://вертати на початкове меню
 
             send_response(cmd, STATUS_LOSE,0,0,0);
             break;
 
-       case CMD_SET://реалізувати умову при якій надсилається окей або фол
-         int j=0;
 
-              for(int i=0; i<9; i++){
-                arr_x[i] =matrix[i][b2] ;
-                arr_y[i] =matrix[b1][i] ;
-                arr_b3[i] = b3;
-                }
-              for(int i=0; i<9; i++){
-              if(arr_b3[i]!=arr_x[i] && arr_b3[i] != arr_y[i]) {
-                j=1;  }
-                }
-              if(j==0){
-                send_response(cmd, STATUS_OK,b1,b2,b3);
-              }
-              if(j==1){
-            	  send_response(cmd, STATUS_INVALID,b1,b2,b3);
-              }
+       case CMD_SET:
 
+         //  Чи це не початкова цифра
+         	 if (matrix[b1][b2] != 0) {
+                 send_response(cmd, STATUS_LOCKED, b1, b2, b3);
+                 break;
+         	 }
+         	 else if(rulle_game(b1, b2, b3)){
+         		matall[b1][b2] = b3;
+         		if (c_zero(matall) == 0) {
+         			send_response(cmd, STATUS_WIN, 7, 7, 7);
+         		}
+         		else{
+         			send_response(cmd, STATUS_OK, b1, b2, b3);
+         		}
+         	 }
+         	 else {
+         		 send_response(cmd, STATUS_INVALID,b1,b2,b3);
+         	 }
             break;
+
 
         case CMD_CLEAR://ніби норм
-            send_response(cmd, STATUS_OK,b1,b2,0);
+        	if (matrix[b1][b2] == 0) {
+        	      matall[b1][b2] = 0;
+        	      send_response(cmd, STATUS_OK, b1, b2, 0);
+        	            }
+        	else {
+
+        	      send_response(cmd, STATUS_LOCKED, b1, b2, 0);
+        	            }
             break;
 
-        case CMD_CLEARALL://очистити все і загрузити рандомну матрицю з початку
-            send_response(cmd, STATUS_OK,0,0,0);
+
+        case CMD_FIELD:
+            send_response(cmd, STATUS_OK, c_zero(matrix), c_zero(matall), 0);
             break;
 
-        case CMD_FIELD://статус гри
-            send_response(cmd, STATUS_OK,c_zero(matrix[9][9]),c_zeros(matall[9][9]),0);
+
+        case CMD_HELP:
+            // b1 - row, b2 - col
+            if (matrix[b1][b2] == 0) { // Якщо це не початкова цифра
+                uint8_t right_val = matCHEAT[b1][b2];
+                matall[b1][b2] = right_val;
+                send_response(cmd, STATUS_NOOB, b1, b2, right_val);
+            }
+            else send_response(cmd, STATUS_LOCKED, b1, b2, 0);
             break;
 
-        default://придумати щось цікаве
-            send_response(cmd, STATUS_INVALID,0,0,0);
-            break;
+
+        case CMD_CHEAT:
+        	memcpy(matall, matCHEAT, sizeof(matCHEAT));
+                 send_response(cmd, STATUS_OK_CHEAT, 6, 6, 6);
+
+                   break;
+
+
+    }
+}
+void swap_rows(uint8_t m[9][9], uint8_t r1, uint8_t r2) {
+    for (int i = 0; i < 9; i++) {
+        uint8_t temp = m[r1][i];
+        m[r1][i] = m[r2][i];
+        m[r2][i] = temp;
     }
 }
 
 
+void swap_cols(uint8_t m[9][9], uint8_t c1, uint8_t c2) {
+    for (int i = 0; i < 9; i++) {
+        uint8_t temp = m[i][c1];
+        m[i][c1] = m[i][c2];
+        m[i][c2] = temp;
+    }
+}
+
+void generate_sudoku(uint8_t difficulty) {
+	memcpy(matall, metalon, sizeof(metalon));
+    srand(HAL_GetTick()); // Сід для рандому на основі часу роботи
+
+    for (int i = 0; i < 15; i++) {
+        uint8_t block = rand() % 3; // вибір блоку 0, 1 або 2
+        uint8_t r1 = block * 3 + rand() % 3;
+        uint8_t r2 = block * 3 + rand() % 3;
+        swap_rows(matall, r1, r2);
+
+        uint8_t c1 = block * 3 + rand() % 3;
+        uint8_t c2 = block * 3 + rand() % 3;
+        swap_cols(matall, c1, c2);
+    }
+    memcpy(matCHEAT, matall, sizeof(matall));
+
+
+    uint8_t holes = difficulty;
+    while (holes > 0) {
+        uint8_t r = rand() % 9;
+        uint8_t c = rand() % 9;
+        if (matall[r][c] != 0) {
+            matall[r][c] = 0;
+            holes--;
+        }
+    }
+
+    // 4. Фіксуємо отримане поле як початкову матрицю
+    memcpy((void*)matrix, matall, sizeof(matall));
+}
+
+uint8_t rulle_game(uint8_t b1, uint8_t b2, uint8_t b3) {
+
+    for (int i = 0; i < 9; i++) {
+
+        if ((i != b2 && matall[b1][i] == b3) || (i != b1 && matall[i][b2] == b3)) {
+            return 0;
+        }
+    }
+
+
+    int sR = (b1 / 3) * 3;
+        int sC = (b2 / 3) * 3;
+        for (int i = 0; i < 3; i++) {
+            for (int k = 0; k < 3; k++) {
+                int currentR = sR + i;
+                int currentC = sC + k;
+
+                if (currentR == b1 && currentC == b2) continue;
+                if (matall[currentR][currentC] == b3) return 0;
+            }
+        }
+
+    return 1;
+}
+
+uint8_t c_zero(uint8_t m[9][9]) {
+    uint8_t count = 0;
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            if (m[i][j] == 0) count++;
+    return count;
+}
+
 void send_response(uint8_t cmd, uint8_t status, uint8_t b1, uint8_t b2, uint8_t b3 )
 {
 	if(cmd==CMD_START||cmd==CMD_RESTART){
+		if(cmd==CMD_RESTART)memcpy(matall, matrix, sizeof(matrix));
+
 	      packet[0] = cmd;
-	            packet[1] = status;
+	      packet[1] = status;
 	            for(int i=0; i<9; i++){
 	                for(int j=0; j<9; j++){
 	                    packet[2 + i*9 + j] = matrix[i][j];
 	                }
 	            }
-
-	            packet[83] = cmd ^ status;
-
+	            uint8_t crc84 = 0;
+	                    for (int i = 0; i < 83; i++) {
+	                        crc84 ^= packet[i];
+	                    }
+	                    packet[83] = crc84;
 	            HAL_UART_Transmit(&huart2, packet, 84, HAL_MAX_DELAY);
 	    }
-	/*else if(cmd==CMD_){
-	    	packet[0] = cmd;
-	    	            packet[1] = status;
-	    	            for(int i=0; i<9; i++){
-	    	                for(int j=0; j<9; j++){
-	    	                    packet[2 + i*9 + j] = matrix[i][j];
-	    	                }
-	    	            }
+	else if (cmd==CMD_CHEAT){
+		packet[0] = cmd;
+			      packet[1] = status;
+			            for(int i=0; i<9; i++){
+			                for(int j=0; j<9; j++){
+			                    packet[2 + i*9 + j] = matCHEAT[i][j];
+			                }
+			            }
+			            uint8_t crc84 = 0;
+			                    for (int i = 0; i < 83; i++) {
+			                        crc84 ^= packet[i];
+			                    }
+			                    packet[83] = crc84;
+			            HAL_UART_Transmit(&huart2, packet, 84, HAL_MAX_DELAY);
 
-	    	            packet[83] = cmd ^ status;
 
-	    	            HAL_UART_Transmit(&huart2, packet, 84, HAL_MAX_DELAY);
-
-	    }*/
+	}
 
 	else {
 		tx_buf[0] = cmd;
@@ -212,16 +329,19 @@ void send_response(uint8_t cmd, uint8_t status, uint8_t b1, uint8_t b2, uint8_t 
 		tx_buf[2] = b1;
 		tx_buf[3] = b2;
 		tx_buf[4] = b3;
-		tx_buf[5] = cmd ^ b1 ^ b2 ^ b3;
+		uint8_t crc5 = 0;
+			for (int i = 0; i < 5; i++) {
+			     crc5 ^= tx_buf[i];
+			     }
+		tx_buf[5] = crc5;
 
-			if (cmd==CMD_SET && status==STATUS_OK ){
-				matall[b1][b2]=b3;
+		HAL_UART_Transmit(&huart2, tx_buf, 6, HAL_MAX_DELAY);
 		}
 
-    HAL_UART_Transmit(&huart2, tx_buf, 6, HAL_MAX_DELAY);
+
 			}
 
-}
+
 /*
     !           !           !
     !           !           !
