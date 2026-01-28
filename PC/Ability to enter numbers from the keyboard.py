@@ -5,7 +5,7 @@ import serial.tools.list_ports
 import threading
 import time
 from functools import reduce
-
+from queue import Queue
 # ================= PROTOCOL CONSTANTS =================
 CMD_START       = 0x01
 CMD_RESTART     = 0x02
@@ -33,11 +33,16 @@ STATUS_MAP = {
 class SudokuGUI:
     def __init__(self, root):
         self.root = root
+        self.pressed_keys = set()
+
         self.root.title("STM32 Sudoku Debug Mode")
         self.root.geometry("750x450")
         # Встановлюємо загальний фон вікна, щоб уникнути артефактів
         self.root.configure(bg="#f1f2f6")
-
+        self.tx_queue = Queue()
+        self.tx_running = True
+        self.last_cmd_time = 0
+        self.TX_DELAY = 0.03 
         self.ser = None
         self.last_port = None
         self.is_reconnecting = False
@@ -62,13 +67,37 @@ class SudokuGUI:
         self.root.bind("<Left>", lambda e: self.navigate(0, -1))
         self.root.bind("<Right>", lambda e: self.navigate(0, 1))
 
+    def tx_thread(self):
+        while self.tx_running:
+            try:
+                cmd = self.tx_queue.get(timeout=0.1)
+                now = time.time()
+                dt = now - self.last_cmd_time
+                if dt < self.TX_DELAY:
+                    time.sleep(self.TX_DELAY - dt)
+
+                if self.ser and self.ser.is_open and not self.is_reconnecting:
+                    self.ser.write(cmd)
+                    self.log_tx(cmd)
+                    self.last_cmd_time = time.time()
+            except:
+                pass
+
+
     def handle_keypress(self, event):
-        if not self.game_started: return
-        char = event.char
-        if char in "123456789":
-            self.set_val(int(char))
-        elif event.keysym in ("BackSpace", "Delete") or char == "0":
+        if not self.game_started:
+            return
+
+        if event.keysym in self.pressed_keys:
+            return
+        self.pressed_keys.add(event.keysym)
+
+        if event.char in "123456789":
+            self.set_val(int(event.char))
+        elif event.keysym in ("BackSpace", "Delete") or event.char == "0":
             self.clear_cell()
+
+        self.root.after(100, lambda k=event.keysym: self.pressed_keys.discard(k))
 
     def navigate(self, dr, dc):
         if not self.game_started: return
@@ -92,22 +121,20 @@ class SudokuGUI:
 
     # ========== SERIAL CORE ==========
     def send_cmd(self, cmd, b1=0, b2=0, b3=0):
-        # Додаткова перевірка перед відправкою
-        if self.is_reconnecting: return
-        
+        if self.is_reconnecting:
+            return
         if not self.ser or not self.ser.is_open:
             self.handle_disconnect()
             return
-            
+
+        payload = [cmd, b1, b2, b3]
+        crc = self.calculate_crc(payload)
+        pkt = bytes(payload + [crc])
+
         try:
-            payload = [cmd, b1, b2, b3]
-            crc = self.calculate_crc(payload)
-            pkt = bytes(payload + [crc])
-            self.ser.write(pkt)
-            self.log_tx(pkt)
+            self.tx_queue.put(pkt)
         except Exception as e:
-            print(f"\033[91m[ERROR TX]: {e}\033[0m")
-            self.handle_disconnect()
+            print(f"[TX QUEUE ERROR] {e}")
 
     def rx_thread(self):
         buffer = bytearray()
@@ -225,7 +252,7 @@ class SudokuGUI:
             self.cells[r][c].config(bg="#fff9c4")
             self.root.after(300, lambda: self.cells[r][c].config(bg=original_bg))
             self.status_bar.config(text=f"STATUS: Використано підказку для ({r + 1}, {c + 1})", fg="#8e44ad")
-            self.send_cmd(CMD_FIELD)
+            #self.send_cmd(CMD_FIELD)
 
     def apply_difficulty_confirmed(self, level):
         colors = {1: "#2ecc71", 2: "#f1c40f", 3: "#e74c3c"}
@@ -324,6 +351,8 @@ class SudokuGUI:
             self.rx_running = True
             threading.Thread(target=self.rx_thread, daemon=True).start()
             print(f"\033[92m[CONNECTED]\033[0m to {port}")
+            self.tx_running = True
+            threading.Thread(target=self.tx_thread, daemon=True).start()
             
         except Exception as e:
             messagebox.showerror("Port Error", str(e))
@@ -425,7 +454,7 @@ class SudokuGUI:
 
     def set_val(self, val):
         self.send_cmd(CMD_SET, self.selected_cell[0], self.selected_cell[1], val)
-        self.root.after(100, lambda: self.send_cmd(CMD_FIELD))
+        #self.root.after(100, lambda: self.send_cmd(CMD_FIELD))
 
     def select_difficulty_request(self, level):
         self.send_cmd(0x08, level, 0, 0)
@@ -439,20 +468,49 @@ class SudokuGUI:
     def give_up_action(self):
         if messagebox.askyesno("Здатися?", "Ви впевнені? Прогрес буде втрачено."):
             self.send_cmd(0x03)
-            self.root.after(200, lambda: self.send_cmd(CMD_FIELD))
+            #self.root.after(200, lambda: self.send_cmd(CMD_FIELD))
 
     def clear_cell(self):
         self.send_cmd(CMD_CLEAR, self.selected_cell[0], self.selected_cell[1])
-        self.root.after(100, lambda: self.send_cmd(CMD_FIELD))
+        #self.root.after(100, lambda: self.send_cmd(CMD_FIELD))
 
     def handle_disconnect(self):
+        # захист від повторного виклику
         if self.is_reconnecting:
             return
+
+        print("\033[91m[DISCONNECTED FROM STM32]\033[0m")
+
+        self.is_reconnecting = True
+
+        # зупиняємо RX / TX
+        self.rx_running = False
+        self.tx_running = False
+
+        # очищаємо TX-чергу, щоб не відправляти старі команди
+        try:
+            while not self.tx_queue.empty():
+                self.tx_queue.get_nowait()
+        except:
+            pass
+
+        # коректно закриваємо порт
+        try:
+            if self.ser and self.ser.is_open:
+                self.ser.close()
+        except:
+            pass
+
+        # показуємо overlay ТІЛЬКИ з GUI-потоку
+        self.root.after(0, self.show_overlay)
+
+        # запускаємо цикл реконекту
+        threading.Thread(target=self.reconnect_loop, daemon=True).start()
 
         print("\033[91m[DISCONNECTED FROM STM]\033[0m")
         self.is_reconnecting = True
         self.rx_running = False
-
+ 
         try:
             if self.ser:
                 self.ser.close()
